@@ -1,0 +1,19 @@
+# zsh configuration inside the NFZ-ESP-DEV container (copied to /root/.zshrc)
+
+# Oh My Zsh (pinned in the Containerfile; no self-updates)
+export ZSH=/root/.oh-my-zsh
+ZSH_THEME="robbyrussell"
+plugins=(git)
+zstyle ':omz:update' mode disabled
+# Folders mounted from the host belong to "root" here; skip the ownership warning
+ZSH_DISABLE_COMPFIX=true
+source "$ZSH/oh-my-zsh.sh"
+
+# Claude Code CLI
+export PATH="/root/.local/bin:$PATH"
+
+# ESP-IDF: idf.py, compilers, esptool. The entrypoint already loads it; this
+# covers new shells started later (e.g. tmux panes).
+if ! command -v idf.py > /dev/null 2>&1; then
+    source /opt/esp/idf/export.sh > /dev/null 2>&1
+fi

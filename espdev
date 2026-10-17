@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  espdev — open the current folder in the NFZ-ESP-DEV container
+# =============================================================================
+#  Usage (from an ESP-IDF project folder):
+#    espdev                 interactive zsh (idf.py, nvim, claude, tmux)
+#    espdev <command...>    run one command, e.g.  espdev idf.py build
+#
+#  The folder appears at the same path inside the container, so error
+#  messages, compile_commands.json and Claude's per-project memory match the
+#  host. With rootless podman, "root" inside is your own user: files created
+#  inside belong to you on the host.
+#
+#  Settings (override per run):
+#    ESPDEV_IMAGE   image to run (default: this machine's :latest-<arch>)
+# =============================================================================
+set -euo pipefail
+shopt -s nullglob
+
+IMAGE="${ESPDEV_IMAGE:-quay.io/quizzical0902/nfz-esp-dev:latest-$(uname -m)}"
+dir=$(pwd)
+
+# Neovim config is shared with the host; create the folder if it's missing,
+# so the mount works before kickstart.nvim is set up
+mkdir -p "$HOME/.config/nvim" "$HOME/.claude"
+
+args=(
+    --rm -it
+    --hostname espdev
+    # use folders from the home directory without relabeling them for SELinux
+    --security-opt label=disable
+    # serial ports through your dialout group
+    --group-add keep-groups
+    # the project, at the same path as on the host
+    -v "$dir:$dir" -w "$dir"
+    -e IDF_GIT_SAFE_DIR="$dir"
+    # Neovim: config from the host, plugins/language servers in a volume
+    # (they are built for the container's Ubuntu, not for Fedora)
+    -v "$HOME/.config/nvim:/root/.config/nvim"
+    -v nfz-esp-nvim-data:/root/.local/share/nvim
+    # Claude Code: login, settings and per-project memory from the host
+    -v "$HOME/.claude:/root/.claude"
+)
+[[ -f "$HOME/.gitconfig" ]] && args+=(-v "$HOME/.gitconfig:/root/.gitconfig:ro")
+
+# Pass in every USB serial port that is plugged in right now
+for dev in /dev/ttyACM* /dev/ttyUSB*; do
+    args+=(--device "$dev")
+done
+
+if (( $# )); then
+    exec podman run "${args[@]}" "$IMAGE" "$@"
+else
+    exec podman run "${args[@]}" "$IMAGE" zsh
+fi
